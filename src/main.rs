@@ -62,6 +62,10 @@ fn main() {
             .long("no-reset")
             .short("n")
             .help("if present, the bitfile will not reset when closed"))
+        .arg(Arg::with_name("groups")
+            .long("groups")
+            .short("g")
+            .help("if present, enumerated controls and indicators will have batch access methods"))
         .get_matches();
     let input = matches.value_of("input").unwrap();
     let mut out: PathBuf = input.parse().unwrap();
@@ -71,6 +75,7 @@ fn main() {
     let resource = matches.value_of("resource").unwrap_or("RIO0");
     let run= !matches.is_present("no-run");
     let reset_on_close = !matches.is_present("no-reset");
+    let groups = !matches.is_present("groups");
     let mut indicators = Vec::<Item>::new();
     let mut controls = Vec::<Item>::new();
     let mut write_fifos = Vec::<Item>::new();
@@ -80,9 +85,19 @@ fn main() {
     let mut indicator_groups = Vec::<Group>::new();
     let mut control_groups = Vec::<Group>::new();
     let contents = fs::read_to_string(&input).unwrap();
-    for caps in Regex::new(r"NiFpga_.+_(?P<item>Indicator|Control|TargetToHostFifo|HostToTargetFifo)(?P<array>(Array)?)(?P<type>([^_\sS]|S[^_\si]|Si[^_\sz]|Siz[^_\se])?+)(?P<size>(Size)?)_(?P<name>.+)\s=\s(?P<address>.+),").unwrap().captures_iter(&contents) {
+    for caps in Regex::new(r"NiFpga_.+_(?P<item>Indicator|Control|TargetToHostFifo|HostToTargetFifo)(?P<array>(Array)?)(?P<type>(NiFpga_Bool|([^_\sS]|S[^_\si]|Si[^_\sz]|Siz[^_\se])?+))(?P<size>(Size)?)_(?P<name>.+)\s=\s(?P<address>.+),").unwrap().captures_iter(&contents) {
         let item = Item{name: caps["name"].to_string(), address: caps["address"].to_string(), datatype: match &caps["type"]{
+            "I8" => "i8",
+            "U8" => "u8",
+            "I16" => "i16",
+            "U16" => "u16",
+            "I32" => "i32",
+            "U32" => "u32",
+            "I64" => "i64",
+            "U64" => "u64",
             "Sgl" => "f32",
+            "Dbl" => "f64",
+            "NiFpga_Bool" => "bool",
             unknown => panic!("unknown type {}", unknown)
         }.to_string()};
         if &caps["array"] == "Array"{
@@ -184,41 +199,43 @@ fn main() {
             name = control.name, datatype = control.datatype, address = control.address, size = control.size
         ));
     });
-    indicator_groups.iter().for_each(|group| {
-        trait_fns.push_str(&format!(
-            "\tfn read_{}s(&self) -> Result<[{}; {}], NifpgaError>;\n",
-            group.name, group.datatype, group.elements.len()
-        ));
-        impl_fns.push_str(&format!(
-            "\tfn read_{name}s(&self) -> Result<[{datatype}; {size}], NifpgaError>{{\n\
-            \t\tlet mut array: [{datatype}; {size}] = Default::default();\n",
-            name = group.name, datatype = group.datatype, size = group.elements.len()
-        ));
-        group.elements.iter().enumerate().for_each(|(i, el)| {
-            impl_fns.push_str(&format!(
-                "\t\tarray[{i}] = self.read::<{datatype}>({address})?;\n",
-                datatype = group.datatype, address = el.address, i = i
+    if groups {
+        indicator_groups.iter().for_each(|group| {
+            trait_fns.push_str(&format!(
+                "\tfn read_{}s(&self) -> Result<[{}; {}], NifpgaError>;\n",
+                group.name, group.datatype, group.elements.len()
             ));
-        });
-        impl_fns.push_str("\t\tOk(array)\n\t}\n");
-    });
-    control_groups.iter().for_each(|group| {
-        trait_fns.push_str(&format!(
-            "\tfn write_{}s(&self, array: &[{}; {}]) -> Result<(), NifpgaError>;\n",
-            group.name, group.datatype, group.elements.len()
-        ));
-        impl_fns.push_str(&format!(
-            "\tfn write_{name}s(&self, array: &[{datatype}; {size}]) -> Result<(), NifpgaError>{{\n",
-            name = group.name, datatype = group.datatype, size = group.elements.len()
-        ));
-        group.elements.iter().enumerate().for_each(|(i, el)| {
             impl_fns.push_str(&format!(
-                "\t\tself.write({address}, array[{i}])?;\n",
-                address = el.address, i = i
+                "\tfn read_{name}s(&self) -> Result<[{datatype}; {size}], NifpgaError>{{\n\
+                \t\tlet mut array: [{datatype}; {size}] = Default::default();\n",
+                name = group.name, datatype = group.datatype, size = group.elements.len()
             ));
+            group.elements.iter().enumerate().for_each(|(i, el)| {
+                impl_fns.push_str(&format!(
+                    "\t\tarray[{i}] = self.read::<{datatype}>({address})?;\n",
+                    datatype = group.datatype, address = el.address, i = i
+                ));
+            });
+            impl_fns.push_str("\t\tOk(array)\n\t}\n");
         });
-        impl_fns.push_str("\t\tOk(())\n\t}\n");
-    });
+        control_groups.iter().for_each(|group| {
+            trait_fns.push_str(&format!(
+                "\tfn write_{}s(&self, array: &[{}; {}]) -> Result<(), NifpgaError>;\n",
+                group.name, group.datatype, group.elements.len()
+            ));
+            impl_fns.push_str(&format!(
+                "\tfn write_{name}s(&self, array: &[{datatype}; {size}]) -> Result<(), NifpgaError>{{\n",
+                name = group.name, datatype = group.datatype, size = group.elements.len()
+            ));
+            group.elements.iter().enumerate().for_each(|(i, el)| {
+                impl_fns.push_str(&format!(
+                    "\t\tself.write({address}, array[{i}])?;\n",
+                    address = el.address, i = i
+                ));
+            });
+            impl_fns.push_str("\t\tOk(())\n\t}\n");
+        });
+    }
     read_fifos.iter().for_each(|fifo| {
         trait_fns.push_str(&format!(
             "\tfn open_{}(&self, depth: usize) -> Result<(ReadFifo<{}>, usize), NifpgaError>;\n",
