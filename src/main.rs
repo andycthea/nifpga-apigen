@@ -147,142 +147,108 @@ fn main() {
         .iter_mut()
         .for_each(|group| group.elements.sort_unstable());
 
-    let mut trait_fns = "".to_string();
-    let mut impl_fns = "".to_string();
-    indicators.iter().for_each(|indicator| {
-        trait_fns.push_str(&format!(
-            "\tfn read_{}(&self) -> Result<{}, NifpgaError>;\n",
-            indicator.name, indicator.datatype
-        ));
-        impl_fns.push_str(&format!(
-            "\tfn read_{name}(&self) -> Result<{datatype}, NifpgaError>{{\n\
-            \t\tself.read::<{datatype}>({address})\n\
+    let mut fns = "".to_string();
+    for indicator in indicators.iter() {
+        fns.push_str(&format!(
+            "\tpub fn read_{name}(&self) -> Result<{datatype}, NifpgaError>{{\n\
+            \t\tself.session.read::<{datatype}>({address})\n\
             \t}}\n",
             name = indicator.name, datatype = indicator.datatype, address = indicator.address
         ));
-    });
-    controls.iter().for_each(|control| {
-        trait_fns.push_str(&format!(
-            "\tfn write_{}(&self, value: {}) -> Result<(), NifpgaError>;\n",
-            control.name, control.datatype
-        ));
-        impl_fns.push_str(&format!(
-            "\tfn write_{name}(&self, value: {datatype}) -> Result<(), NifpgaError>{{\n\
-            \t\tself.write({address}, value)\n\
+    };
+    for control in controls.iter(){
+        fns.push_str(&format!(
+            "\tpub fn write_{name}(&self, value: {datatype}) -> Result<(), NifpgaError>{{\n\
+            \t\tself.session.write({address}, value)\n\
             \t}}\n",
             name = control.name, datatype = control.datatype, address = control.address
         ));
-    });
-    array_indicators.iter().for_each(|indicator| {
-        trait_fns.push_str(&format!(
-            "\tfn read_{}(&self) -> Result<[{}; {}], NifpgaError>;\n",
-            indicator.name, indicator.datatype, indicator.size
-        ));
-        impl_fns.push_str(&format!(
-            "\tfn read_{name}(&self) -> Result<[{datatype}; {size}], NifpgaError>{{\n\
+    };
+    for indicator in array_indicators.iter(){
+        fns.push_str(&format!(
+            "\tpub fn read_{name}(&self) -> Result<[{datatype}; {size}], NifpgaError>{{\n\
             \t\tlet mut array: [{datatype}; {size}] = Default::default();\n\
-            \t\tself.read_array::<{datatype}>({address}, &mut array)?;\n\
+            \t\tself.session.read_array::<{datatype}>({address}, &mut array)?;\n\
             \t\tOk(array)\n\
             \t}}\n",
             name = indicator.name, datatype = indicator.datatype, address = indicator.address, size = indicator.size
         ));
-    });
-    array_controls.iter().for_each(|control| {
-        trait_fns.push_str(&format!(
-            "\tfn write_{}(&self, array: &[{}; {}]) -> Result<(), NifpgaError>;\n",
-            control.name, control.datatype, control.size
-        ));
-        impl_fns.push_str(&format!(
-            "\tfn write_{name}(&self, array: &[{datatype}; {size}]) -> Result<(), NifpgaError>{{\n\
-            \t\tself.write_array::<{datatype}>({address}, array)\n\
+    };
+    for control in array_controls.iter(){
+        fns.push_str(&format!(
+            "\tpub fn write_{name}(&self, array: &[{datatype}; {size}]) -> Result<(), NifpgaError>{{\n\
+            \t\tself.session.write_array::<{datatype}>({address}, array)\n\
             \t}}\n",
             name = control.name, datatype = control.datatype, address = control.address, size = control.size
         ));
-    });
+    };
     if groups {
-        indicator_groups.iter().for_each(|group| {
-            trait_fns.push_str(&format!(
-                "\tfn read_{}s(&self) -> Result<[{}; {}], NifpgaError>;\n",
-                group.name, group.datatype, group.elements.len()
-            ));
-            impl_fns.push_str(&format!(
-                "\tfn read_{name}s(&self) -> Result<[{datatype}; {size}], NifpgaError>{{\n\
+        for group in indicator_groups.iter(){
+            fns.push_str(&format!(
+                "\tpub fn read_{name}s(&self) -> Result<[{datatype}; {size}], NifpgaError>{{\n\
                 \t\tlet mut array: [{datatype}; {size}] = Default::default();\n",
                 name = group.name, datatype = group.datatype, size = group.elements.len()
             ));
-            group.elements.iter().enumerate().for_each(|(i, el)| {
-                impl_fns.push_str(&format!(
-                    "\t\tarray[{i}] = self.read::<{datatype}>({address})?;\n",
+            for (i, el) in group.elements.iter().enumerate(){
+                fns.push_str(&format!(
+                    "\t\tarray[{i}] = self.session.read::<{datatype}>({address})?;\n",
                     datatype = group.datatype, address = el.address, i = i
                 ));
-            });
-            impl_fns.push_str("\t\tOk(array)\n\t}\n");
-        });
-        control_groups.iter().for_each(|group| {
-            trait_fns.push_str(&format!(
-                "\tfn write_{}s(&self, array: &[{}; {}]) -> Result<(), NifpgaError>;\n",
-                group.name, group.datatype, group.elements.len()
-            ));
-            impl_fns.push_str(&format!(
-                "\tfn write_{name}s(&self, array: &[{datatype}; {size}]) -> Result<(), NifpgaError>{{\n",
+            };
+            fns.push_str("\t\tOk(array)\n\t}\n");
+        };
+        for group in control_groups.iter(){
+            fns.push_str(&format!(
+                "\tpub fn write_{name}s(&self, array: &[{datatype}; {size}]) -> Result<(), NifpgaError>{{\n",
                 name = group.name, datatype = group.datatype, size = group.elements.len()
             ));
-            group.elements.iter().enumerate().for_each(|(i, el)| {
-                impl_fns.push_str(&format!(
-                    "\t\tself.write({address}, array[{i}])?;\n",
+            for (i, el) in group.elements.iter().enumerate(){
+                fns.push_str(&format!(
+                    "\t\tself.session.write({address}, array[{i}])?;\n",
                     address = el.address, i = i
                 ));
-            });
-            impl_fns.push_str("\t\tOk(())\n\t}\n");
-        });
+            };
+            fns.push_str("\t\tOk(())\n\t}\n");
+        };
     }
-    read_fifos.iter().for_each(|fifo| {
-        trait_fns.push_str(&format!(
-            "\tfn open_{}(&self, depth: usize) -> Result<(ReadFifo<{}>, usize), NifpgaError>;\n",
-            fifo.name, fifo.datatype
-        ));
-        impl_fns.push_str(&format!(
-            "\tfn open_{name}(&self, depth: usize) -> Result<(ReadFifo<{datatype}>, usize), NifpgaError>{{\n\
-            \t\tself.open_read_fifo::<{datatype}>({address}, depth)\n\
+    for fifo in read_fifos.iter(){
+        fns.push_str(&format!(
+            "\tpub fn open_{name}(&self, depth: usize) -> Result<(ReadFifo<{datatype}>, usize), NifpgaError>{{\n\
+            \t\tself.session.open_read_fifo::<{datatype}>({address}, depth)\n\
             \t}}\n",
             name = fifo.name, datatype = fifo.datatype, address = fifo.address
         ));
-    });
-    write_fifos.iter().for_each(|fifo| {
-        trait_fns.push_str(&format!(
-            "\tfn open_{}(&self, depth: usize) -> Result<(WriteFifo<{}>, usize), NifpgaError>;\n",
-            fifo.name, fifo.datatype
-        ));
-        impl_fns.push_str(&format!(
-            "\tfn open_{name}(&self, depth: usize) -> Result<(WriteFifo<{datatype}>, usize), NifpgaError>{{\n\
-            \t\tself.open_write_fifo::<{datatype}>({address}, depth)\n\
+    };
+    for fifo in write_fifos.iter(){
+        fns.push_str(&format!(
+            "\tpub fn open_{name}(&self, depth: usize) -> Result<(WriteFifo<{datatype}>, usize), NifpgaError>{{\n\
+            \t\tself.session.open_write_fifo::<{datatype}>({address}, depth)\n\
             \t}}\n",
             name = fifo.name, datatype = fifo.datatype, address = fifo.address
         ));
-    });
+    };
 
     let mut file = File::create(out).unwrap();
     file.write_all(format!(
         "//generated with nifpga-apigen\n\
         use nifpga::{{NifpgaError, Session, ReadFifo, WriteFifo}};\n\
         \n\
-        pub trait Fpga {{\n\
-        {trait_fns}}}\n\
+        pub struct Fpga {{\n\
+        \tpub session: Session\n\
+        }}\n\
         \n\
-        impl Fpga for Session {{\n\
-        {impl_fns}}}\n\
-        \n\
-        pub fn open() -> Result<Session, NifpgaError>{{\n\
-            \tSession::open(\n\
-                \t\t\"{path}\",\n\
-                \t\t{signature},\n\
-                \t\t\"{resource}\",\n\
-                \t\t{run},\n\
-                \t\t{reset_on_close}\n\
-            \t)\n\
-        }}",
-        trait_fns = trait_fns,
-        impl_fns = impl_fns,
+        impl Fpga {{\n\
+        \tpub fn open() -> Result<Fpga, NifpgaError>{{\n\
+            \t\tOk(Fpga{{session: Session::open(\n\
+                \t\t\t\"{path}\",\n\
+                \t\t\t{signature},\n\
+                \t\t\t\"{resource}\",\n\
+                \t\t\t{run},\n\
+                \t\t\t{reset_on_close}\n\
+            \t\t)?}})\n\
+        \t}}\n\
+        {fns}}}",
+        fns = fns,
         path = path,
         signature = &cap["signature"],
         resource = resource,
