@@ -75,7 +75,7 @@ fn main() {
     let resource = matches.value_of("resource").unwrap_or("RIO0");
     let run= !matches.is_present("no-run");
     let reset_on_close = !matches.is_present("no-reset");
-    let groups = !matches.is_present("groups");
+    let groups = matches.is_present("groups");
     let mut indicators = Vec::<Item>::new();
     let mut controls = Vec::<Item>::new();
     let mut write_fifos = Vec::<Item>::new();
