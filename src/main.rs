@@ -85,7 +85,7 @@ fn main() {
     let mut indicator_groups = Vec::<Group>::new();
     let mut control_groups = Vec::<Group>::new();
     let contents = fs::read_to_string(&input).unwrap();
-    for caps in Regex::new(r"NiFpga_.+_(?P<item>Indicator|Control|TargetToHostFifo|HostToTargetFifo)(?P<array>(Array)?)(?P<type>(NiFpga_Bool|([^_\sS]|S[^_\si]|Si[^_\sz]|Siz[^_\se])?+))(?P<size>(Size)?)_(?P<name>.+)\s=\s(?P<address>.+),").unwrap().captures_iter(&contents) {
+    for caps in Regex::new(r"NiFpga_.+_(?P<item>Indicator|Control|TargetToHostFifo|HostToTargetFifo)(?P<array>(Array)?)(?P<type>([^_\sS]|S[^_\si]|Si[^_\sz]|Siz[^_\se])?+)(?P<size>(Size)?)_(?P<name>.+)\s=\s(?P<address>.+),").unwrap().captures_iter(&contents) {
         let item = Item{name: caps["name"].to_string(), address: caps["address"].to_string(), datatype: match &caps["type"]{
             "I8" => "i8",
             "U8" => "u8",
@@ -97,7 +97,7 @@ fn main() {
             "U64" => "u64",
             "Sgl" => "f32",
             "Dbl" => "f64",
-            "NiFpga_Bool" => "bool",
+            "Bool" => "bool",
             unknown => panic!("unknown type {}", unknown)
         }.to_string()};
         if &caps["array"] == "Array"{
