@@ -5,4 +5,4 @@ Command line utility for generating Rust interfaces to NI FPGAs using [nifpga-rs
 
 ```cargo install nifpga-apigen```
 
-An example project can be found here: [https://github.com/dbtaylor/rio-rs-ex]
+An example project can be found here: https://github.com/dbtaylor/rio-rs-ex
