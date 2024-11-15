@@ -1,6 +1,6 @@
 [package]
 name = "nifpga-apigen"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["David Taylor <david.baker.taylor@gmail.com>", "Andy Cate <andy.cate@thea.energy>"]
 edition = "2021"
 description = "API generator for NI FPGAs"
