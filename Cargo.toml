@@ -9,3 +9,4 @@ license = "MIT"
 [dependencies]
 regex = "1.11.1"
 clap = { version = "4.5.21", features = ["derive"] }
+anyhow = "1.0.93"

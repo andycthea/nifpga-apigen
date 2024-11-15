@@ -2,6 +2,7 @@ use regex::Regex;
 use std::fs::{self, File};
 use clap::Parser;
 use std::io::prelude::*;
+use anyhow::{Context, Result, bail};
 
 #[derive(Debug)]
 struct Item {
@@ -63,16 +64,7 @@ struct Args {
     groups: bool,
 }
 
-fn main() {
-    let args = Args::parse();
-    
-    let input = args.input;
-    let out = args.out;
-    let path = args.path;
-    let resource = args.resource;
-    let run = !args.no_run;
-    let reset_on_close = !args.no_reset;
-    let groups = args.groups;
+pub fn generate(input: &str, out: &str, path: &str, resource: &str, run: bool, reset_on_close: bool, groups: bool) -> Result<()> {
     let mut indicators = Vec::<Item>::new();
     let mut controls = Vec::<Item>::new();
     let mut write_fifos = Vec::<Item>::new();
@@ -81,8 +73,8 @@ fn main() {
     let mut array_controls = Vec::<SizedItem>::new();
     let mut indicator_groups = Vec::<Group>::new();
     let mut control_groups = Vec::<Group>::new();
-    let contents = fs::read_to_string(&input).unwrap();
-    for caps in Regex::new(r"NiFpga_.+_(?P<item>Indicator|Control|TargetToHostFifo|HostToTargetFifo)(?P<array>(Array)?)(?P<type>([^_\sS](?:[0-9]+|)|S[^_\si]|Si[^_\sz]|Siz[^_\se])?+)(?P<size>(Size)?)_(?P<name>.+)\s=\s(?P<address>.+)(?:,|)").unwrap().captures_iter(&contents) {
+    let contents = fs::read_to_string(&input)?;
+    for caps in Regex::new(r"NiFpga_.+_(?P<item>Indicator|Control|TargetToHostFifo|HostToTargetFifo)(?P<array>(Array)?)(?P<type>([^_\sS](?:[0-9]+|)|S[^_\si]|Si[^_\sz]|Siz[^_\se])?+)(?P<size>(Size)?)_(?P<name>.+)\s=\s(?P<address>.+)(?:,|)")?.captures_iter(&contents) {
         let item = Item{name: caps["name"].to_string(), address: caps["address"].to_string(), datatype: match &caps["type"]{
             "I8" => "i8",
             "U8" => "u8",
@@ -95,13 +87,13 @@ fn main() {
             "Sgl" => "f32",
             "Dbl" => "f64",
             "Bool" => "bool",
-            unknown => panic!("unknown type {}", unknown)
+            unknown => bail!("unknown data type {}", unknown)
         }.to_string()};
         if &caps["array"] == "Array"{
             let arr = if &caps["item"] == "Indicator" {&mut array_indicators} else {&mut array_controls};
             if &caps["size"] == "Size"{
                 match arr.iter_mut().position(|el| el.name == item.name){
-                    Some(index) => {arr[index].size = item.address.parse().unwrap()},
+                    Some(index) => {arr[index].size = item.address.parse()?},
                     None => {}
                 };
             }
@@ -119,9 +111,9 @@ fn main() {
             };
             match group_arr {
                 Some(group_arr) => {
-                    match Regex::new(r"(?P<name>.+)_(?P<i>\d+)$").unwrap().captures(&item.name) {
+                    match Regex::new(r"(?P<name>.+)_(?P<i>\d+)$")?.captures(&item.name) {
                         Some(caps) => {
-                            let element = GroupElement{address: item.address.clone(), i: caps["i"].parse().unwrap()};
+                            let element = GroupElement{address: item.address.clone(), i: caps["i"].parse()?};
                             match group_arr.iter_mut().position(|el| el.name == caps["name"] && el.datatype == item.datatype){
                                 Some(index) => {group_arr[index].elements.push(element)},
                                 None => {group_arr.push(Group{name: caps["name"].to_string(), datatype: item.datatype.clone(), elements: vec![element]})}
@@ -136,10 +128,8 @@ fn main() {
         }
         
     }
-    let cap = Regex::new(r"NiFpga_.+_Signature\s=\s(?P<signature>.+);")
-        .unwrap()
-        .captures(&contents)
-        .unwrap();
+    let cap = Regex::new(r"NiFpga_.+_Signature\s=\s(?P<signature>.+);")?
+        .captures(&contents).context("signature not found")?;
     indicator_groups
         .iter_mut()
         .for_each(|group| group.elements.sort_unstable());
@@ -225,7 +215,7 @@ fn main() {
         ));
     };
 
-    let mut file = File::create(out).unwrap();
+    let mut file = File::create(out)?;
     file.write_all(format!(
         "//generated with nifpga-apigen\n\
         use nifpga::{{NifpgaError, Session, ReadFifo, WriteFifo}};\n\
@@ -251,5 +241,22 @@ fn main() {
         resource = resource,
         run = run,
         reset_on_close = reset_on_close
-    ).as_bytes()).unwrap();
+    ).as_bytes())?;
+    Ok(())
+}
+
+fn main() {
+    let args = Args::parse();
+    
+    let input = args.input;
+    let out = args.out;
+    let path = args.path;
+    let resource = args.resource;
+    let run = !args.no_run;
+    let reset_on_close = !args.no_reset;
+    let groups = args.groups;
+    match generate(&input, &out, &path, &resource, run, reset_on_close, groups) {
+        Ok(_) => println!("generated {}", out),
+        Err(e) => eprintln!("{}", e)
+    }
 }
