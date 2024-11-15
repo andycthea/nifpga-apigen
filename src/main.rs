@@ -1,7 +1,6 @@
 use regex::Regex;
 use std::fs::{self, File};
-use clap::{Arg, App};
-use std::path::PathBuf;
+use clap::Parser;
 use std::io::prelude::*;
 
 #[derive(Debug)]
@@ -32,50 +31,48 @@ struct Group {
     elements: Vec<GroupElement>,
 }
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Sets the input file to use
+    #[arg(short, long)]
+    input: String,
+
+    /// output file relative to input directory. defaults to mod.rs
+    #[arg(short, long, default_value = "mod.rs")]
+    out: String,
+
+    /// bitfile path. defaults to /home/lvuser/fpga.lvbitx
+    #[arg(short, long, default_value = "/home/lvuser/fpga.lvbitx")]
+    path: String,
+
+    /// resource name. defaults to RIO0
+    #[arg(short, long, default_value = "RIO0")]
+    resource: String,
+
+    /// if present, the bitfile will not run when opened
+    #[arg(long)]
+    no_run: bool,
+
+    /// if present, the bitfile will not reset when closed
+    #[arg(long)]
+    no_reset: bool,
+
+    /// if present, enumerated controls and indicators will have batch access methods
+    #[arg(long)]
+    groups: bool,
+}
+
 fn main() {
+    let args = Args::parse();
     
-    let matches = App::new("nifpga-apigen")
-        .version("0.1.0")
-        .arg(Arg::with_name("input")
-             .help("Sets the input file to use")
-             .required(true)
-             .index(1))
-        .arg(Arg::with_name("out")
-            .short("o")
-            .long("out")
-            .takes_value(true)
-            .help("output file relative to input directory. defaults to mod.rs"))
-        .arg(Arg::with_name("path")
-            .short("p")
-            .long("path")
-            .takes_value(true)
-            .help("bitfile path. defaults to /home/lvuser/fpga.lvbitx"))
-        .arg(Arg::with_name("resource")
-            .short("r")
-            .long("res")
-            .takes_value(true)
-            .help("resource name. defaults to RIO0"))
-        .arg(Arg::with_name("no-run")
-            .long("no-run")
-            .help("if present, the bitfile will not run when opened"))
-        .arg(Arg::with_name("no-reset")
-            .long("no-reset")
-            .short("n")
-            .help("if present, the bitfile will not reset when closed"))
-        .arg(Arg::with_name("groups")
-            .long("groups")
-            .short("g")
-            .help("if present, enumerated controls and indicators will have batch access methods"))
-        .get_matches();
-    let input = matches.value_of("input").unwrap();
-    let mut out: PathBuf = input.parse().unwrap();
-    out.pop();
-    out.push(matches.value_of("out").unwrap_or("mod.rs"));
-    let path = matches.value_of("path").unwrap_or("/home/lvuser/fpga.lvbitx");
-    let resource = matches.value_of("resource").unwrap_or("RIO0");
-    let run= !matches.is_present("no-run");
-    let reset_on_close = !matches.is_present("no-reset");
-    let groups = matches.is_present("groups");
+    let input = args.input;
+    let out = args.out;
+    let path = args.path;
+    let resource = args.resource;
+    let run = !args.no_run;
+    let reset_on_close = !args.no_reset;
+    let groups = args.groups;
     let mut indicators = Vec::<Item>::new();
     let mut controls = Vec::<Item>::new();
     let mut write_fifos = Vec::<Item>::new();
@@ -85,7 +82,7 @@ fn main() {
     let mut indicator_groups = Vec::<Group>::new();
     let mut control_groups = Vec::<Group>::new();
     let contents = fs::read_to_string(&input).unwrap();
-    for caps in Regex::new(r"NiFpga_.+_(?P<item>Indicator|Control|TargetToHostFifo|HostToTargetFifo)(?P<array>(Array)?)(?P<type>([^_\sS]|S[^_\si]|Si[^_\sz]|Siz[^_\se])?+)(?P<size>(Size)?)_(?P<name>.+)\s=\s(?P<address>.+),").unwrap().captures_iter(&contents) {
+    for caps in Regex::new(r"NiFpga_.+_(?P<item>Indicator|Control|TargetToHostFifo|HostToTargetFifo)(?P<array>(Array)?)(?P<type>([^_\sS](?:[0-9]+|)|S[^_\si]|Si[^_\sz]|Siz[^_\se])?+)(?P<size>(Size)?)_(?P<name>.+)\s=\s(?P<address>.+)(?:,|)").unwrap().captures_iter(&contents) {
         let item = Item{name: caps["name"].to_string(), address: caps["address"].to_string(), datatype: match &caps["type"]{
             "I8" => "i8",
             "U8" => "u8",

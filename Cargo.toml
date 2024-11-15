@@ -1,11 +1,11 @@
 [package]
 name = "nifpga-apigen"
-version = "0.1.5"
-authors = ["David Taylor <david.baker.taylor@gmail.com>"]
-edition = "2018"
+version = "0.2.0"
+authors = ["David Taylor <david.baker.taylor@gmail.com>", "Andy Cate <andy.cate@thea.energy>"]
+edition = "2021"
 description = "API generator for NI FPGAs"
 license = "MIT"
 
 [dependencies]
-regex = "1.3.9"
-clap = "2.33.1"
+regex = "1.11.1"
+clap = { version = "4.5.21", features = ["derive"] }
